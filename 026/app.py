@@ -1,21 +1,13 @@
-%%writefile app.py
 import streamlit as st
 import pandas as pd
 import requests
-
 st.set_page_config(page_title="ระบบข้อมูลเกษตรจาก API", layout="wide")
 st.title("ระบบข้อมูลเกษตรจาก API (Live Agri-Data)")
 st.caption("ดึงข้อมูลจริงแบบสดจากอินเทอร์เน็ต แล้วแสดงผลโต้ตอบได้")
-
-# ส่ง User-Agent แบบเบราว์เซอร์ ช่วยให้บาง API ไม่บล็อกว่าเป็นบอท
 HEADERS = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                           "AppleWebKit/537.36 (KHTML, like Gecko) "
                           "Chrome/124.0 Safari/537.36"),
            "Accept": "application/json"}
-
-# หมายเหตุ: ชื่อคอลัมน์ห้ามมีจุด "." หรือวงเล็บ เพราะกราฟของ Streamlit (Vega-Lite)
-# จะตีความจุดเป็นตัวเข้าถึงฟิลด์ย่อย ทำให้วาดค่าไม่ออก — หน่วยจึงไปไว้ที่ caption/label แทน
-
 @st.cache_data(ttl=1800)
 def ดึงอากาศ(lat, lon, days):
     url = (f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}"
@@ -27,7 +19,6 @@ def ดึงอากาศ(lat, lon, days):
     w = pd.DataFrame(resp.json()["daily"])
     w.columns = ["วันที่", "สูงสุด", "ต่ำสุด", "ฝน", "ความชื้น", "ลม", "แสง"]
     return w
-
 @st.cache_data(ttl=1800)
 def ดึงระดับน้ำ(lat, lon):
     url = (f"https://flood-api.open-meteo.com/v1/flood?latitude={lat}&longitude={lon}"
@@ -37,14 +28,11 @@ def ดึงระดับน้ำ(lat, lon):
     r = pd.DataFrame(resp.json()["daily"])
     r.columns = ["วันที่", "ปริมาณน้ำ"]
     return r
-
-# ราคาสำรอง (snapshot ธ.ค. 2567) ใช้แสดงเมื่อเซิร์ฟเวอร์เข้า data.go.th ไม่ได้
 ราคาสำรอง = pd.DataFrame({
     "สินค้า": ["ทุเรียนหมอนทองคละ", "ยางแผ่นดิบชั้น 3", "เงาะโรงเรียนคละ",
               "กล้วยหอมทองขนาดคละ", "สับปะรดโรงงาน", "มันสำปะหลังคละ"],
     "ราคา": [135.0, 76.4, 40.2, 20.0, 12.5, 1.3],
 })
-
 @st.cache_data(ttl=86400)
 def _ดึงราคาดิบ():
     URL = "https://data.go.th/api/3/action/datastore_search"
@@ -52,21 +40,17 @@ def _ดึงราคาดิบ():
     resp = requests.get(URL, params={"resource_id": RESOURCE_ID, "limit": 5000},
                         headers=HEADERS, timeout=30)
     resp.raise_for_status()
-    recs = resp.json()["result"]["records"]   # ถ้าตอบไม่ใช่ JSON จะ error แล้วไปใช้ค่าสำรอง
+    recs = resp.json()["result"]["records"]
     ราคา = pd.DataFrame(recs).rename(columns={"เกษตรสำคัญบึงกาฬ": "สินค้า", "ค่า": "ราคา"})
     ราคา["ราคา"] = pd.to_numeric(ราคา["ราคา"], errors="coerce")
     return ราคา
-
 def ดึงราคาเกษตร():
-    # st.cache_data ไม่เก็บผลตอน error ดังนั้นถ้าพลาดครั้งนี้ ครั้งหน้าจะลองใหม่เอง
     try:
         return _ดึงราคาดิบ(), True
     except Exception:
         return None, False
-
 แท็บอากาศ, แท็บน้ำ, แท็บราคา = st.tabs(
     ["สภาพอากาศ", "ระดับน้ำแม่น้ำ", "ราคาสินค้าเกษตร"])
-
 # ---------- แท็บ 1: สภาพอากาศ (Open-Meteo) ----------
 with แท็บอากาศ:
     st.subheader("พยากรณ์อากาศรายวันของสวน")
@@ -88,7 +72,6 @@ with แท็บอากาศ:
             st.dataframe(w)
     except Exception as e:
         st.error(f"ดึงข้อมูลอากาศไม่สำเร็จ ลองใหม่อีกครั้ง (สาเหตุ: {e})")
-
 # ---------- แท็บ 2: ระดับน้ำแม่น้ำ (flood API) ----------
 with แท็บน้ำ:
     st.subheader("ปริมาณการไหลของแม่น้ำ (เตือนภัยน้ำท่วม)")
@@ -104,7 +87,6 @@ with แท็บน้ำ:
             st.dataframe(r)
     except Exception as e:
         st.error(f"ดึงระดับน้ำไม่สำเร็จ ลองใหม่อีกครั้ง (สาเหตุ: {e})")
-
 # ---------- แท็บ 3: ราคาสินค้าเกษตร (data.go.th) ----------
 with แท็บราคา:
     st.subheader("ราคาสินค้าเกษตรจริง (ข้อมูลเปิดภาครัฐ)")
@@ -130,7 +112,7 @@ with แท็บราคา:
             ตาราง = ปีนี้.pivot_table(index="เดือน", columns="สินค้า",
                                      values="ราคา", observed=False)
             ตาราง = ตาราง.sort_index()
-            ตาราง.index = ตาราง.index.astype(str)   # เลี่ยง categorical index ที่กราฟไม่ยอมวาด
+            ตาราง.index = ตาราง.index.astype(str)
             st.line_chart(ตาราง)
             เดือนล่าสุด = ตาราง.dropna(how="all").index[-1]
             st.write(f"ราคาเดือนล่าสุด ({เดือนล่าสุด} {ปีล่าสุด}) หน่วย บาท/กก.")
